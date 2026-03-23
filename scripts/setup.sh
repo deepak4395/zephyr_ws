@@ -1,15 +1,15 @@
 #!/usr/bin/env sh
-# setup.sh — Idempotent project setup. Safe to run multiple times.
+# setup.sh — Idempotent Zephyr multi-project setup. Safe to run multiple times.
 #
-# Usage (run from anywhere; the script finds the repo root itself):
-#   sh zephyr_ws/scripts/setup.sh
-#   -- or --
-#   cd zephyr_ws && sh scripts/setup.sh
+# Usage:
+#   sh scripts/setup.sh                        # Interactive: choose project
+#   sh scripts/setup.sh native_project         # Non-interactive: use native_project
+#   sh scripts/setup.sh native_project_2       # Non-interactive: use native_project_2
 #
 # What it does (each step is skipped if already done):
 #   1. Creates venv at <repo>/venv if absent
 #   2. Installs / upgrades west inside the venv
-#   3. Runs west init if .west is absent, then always west update
+#   3. Sets up west workspace using the chosen project's manifest
 #   4. Installs Zephyr Python build requirements
 #   5. Prints build + run commands
 
@@ -27,8 +27,31 @@ ok()    { printf '    OK: %s\n' "$*"; }
 REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VENV_DIR="$REPO_ROOT/venv"
 
-info "Repo root : $REPO_ROOT"
-info "Venv dir  : $VENV_DIR"
+# ── project selection ────────────────────────────────────────────────────────
+PROJECT=${1:-}
+
+if [ -z "$PROJECT" ]; then
+    # Interactive: list available projects
+    info "Available projects:"
+    echo "  1) native_project"
+    echo "  2) native_project_2"
+    printf "Select project (1 or 2): "
+    read -r choice
+    case "$choice" in
+        1) PROJECT="native_project" ;;
+        2) PROJECT="native_project_2" ;;
+        *) die "Invalid choice: $choice" ;;
+    esac
+fi
+
+# Validate project exists
+if [ ! -f "$REPO_ROOT/$PROJECT/west.yml" ]; then
+    die "Project '$PROJECT' not found: $REPO_ROOT/$PROJECT/west.yml"
+fi
+
+info "Repo root  : $REPO_ROOT"
+info "Project    : $PROJECT"
+info "Venv dir   : $VENV_DIR"
 echo ""
 
 # ── 1. Python virtual environment ────────────────────────────────────────────
@@ -56,11 +79,17 @@ cd "$REPO_ROOT"
 
 if [ ! -d ".west" ]; then
     info "Initialising west workspace..."
-    west init -l native_project || die "west init failed"
+    west init -l "$PROJECT" || die "west init failed"
 fi
 
-# Always ensure manifest.path is correct (harmless if already set)
-west config manifest.path native_project
+# Always ensure manifest.path points to the chosen project (allows switching)
+west config manifest.path "$PROJECT"
+ok "Manifest path: $PROJECT"
+
+# Validate manifest before fetching
+info "Validating manifest..."
+west manifest --validate || die "Manifest validation failed"
+ok "Manifest is valid."
 
 info "Running west update (fetches / syncs Zephyr v3.7.0 — may take a while on first run)..."
 west update || die "west update failed"
@@ -78,19 +107,30 @@ else
 fi
 echo ""
 
-# ── 5. Next steps ────────────────────────────────────────────────────────────
+# ── 5. Build the project ─────────────────────────────────────────────────────
+BUILD_DIR="$REPO_ROOT/$PROJECT/build_native"
+
+info "Building $PROJECT for native_posix_64..."
+cd "$REPO_ROOT"
+west build -b native_posix_64 "$PROJECT/app" -d "$BUILD_DIR" -p always -- -DZEPHYR_TOOLCHAIN_VARIANT=host || die "west build failed"
+ok "Build successful."
+echo ""
+
+# ── 6. Next steps ────────────────────────────────────────────────────────────
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " Setup complete! Re-running this script any time is safe."
+echo " Setup & build complete for '$PROJECT'! Re-running this script any time is safe."
+echo ""
+echo " Switch to a different project and rebuild:"
+echo "   sh scripts/setup.sh native_project  # or native_project_2"
 echo ""
 echo " Activate the environment in any new terminal:"
 echo "   source $VENV_DIR/bin/activate"
 echo ""
-echo " Build the native app:"
-echo "   cd $REPO_ROOT"
-echo "   west build -b native_posix_64 native_project/app \\"
-echo "              -d native_project/build_native \\"
-echo "              -- -DZEPHYR_TOOLCHAIN_VARIANT=host"
+echo " Run the built app:"
+echo "   ./$PROJECT/build_native/zephyr/zephyr.exe"
 echo ""
-echo " Run it:"
-echo "   ./native_project/build_native/zephyr/zephyr.exe"
+echo " Rebuild $PROJECT without full setup:"
+echo "   cd $REPO_ROOT"
+echo "   source venv/bin/activate"
+echo "   west build -b native_posix_64 $PROJECT/app -d $PROJECT/build_native"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
