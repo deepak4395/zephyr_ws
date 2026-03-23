@@ -8,7 +8,7 @@ manifest:
     # ESP32 HAL for GPIO support
     - name: hal_espressif
       url: https://github.com/zephyrproject-rtos/hal_espressif.git
-      revision: zephyr
+      revision: 87e7902d7184a8280b4d13bce79801a723f4ddd8
       path: modules/hal/espressif
   self:
     path: esp32_led_blink

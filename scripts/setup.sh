@@ -99,6 +99,28 @@ info "Board      : $BOARD"
 info "Venv dir   : $VENV_DIR"
 echo ""
 
+# ── 0. ESP32 environment setup (if needed) ────────────────────────────────────
+if [ "$BOARD" != "native_posix_64" ]; then
+    info "Setting up hardware target environment..."
+    
+    # Check if Zephyr SDK is installed
+    SDK_DIR="$REPO_ROOT/zephyr-sdk-0.16.8"
+    if [ ! -d "$SDK_DIR" ]; then
+        die "Zephyr SDK not found at: $SDK_DIR
+        
+Please install it first:
+  sh scripts/install_esp32_toolchain.sh"
+    fi
+    
+    # Export SDK paths
+    export ZEPHYR_SDK_INSTALL_DIR="$SDK_DIR"
+    export PATH="$SDK_DIR/x86_64-pokysdk-linux/usr/bin:$PATH"
+    export PATH="$SDK_DIR/tools/bin:$PATH"
+    
+    ok "ZEPHYR_SDK_INSTALL_DIR=$ZEPHYR_SDK_INSTALL_DIR"
+fi
+echo ""
+
 # ── 1. Python virtual environment ────────────────────────────────────────────
 if [ ! -f "$VENV_DIR/bin/activate" ]; then
     info "Creating Python virtual environment..."
@@ -153,12 +175,21 @@ fi
 echo ""
 
 # ── 5. Build the project ─────────────────────────────────────────────────────
-BUILD_DIR="$REPO_ROOT/$PROJECT/build_native"
+BUILD_DIR="$REPO_ROOT/$PROJECT/build_$BOARD"
 
-info "Building $PROJECT for native_posix_64..."
+info "Building $PROJECT for $BOARD..."
 cd "$REPO_ROOT"
-west build -b native_posix_64 "$PROJECT/app" -d "$BUILD_DIR" -p always -- -DZEPHYR_TOOLCHAIN_VARIANT=host || die "west build failed"
-ok "Build successful."
+
+# For native POSIX simulation, use host compiler. For hardware targets, use Zephyr SDK.
+if [ "$BOARD" = "native_posix_64" ]; then
+    # Native simulation: leverage host compiler (no cross-compiler needed)
+    west build -b "$BOARD" "$PROJECT/app" -d "$BUILD_DIR" -p always -- -DZEPHYR_TOOLCHAIN_VARIANT=host || die "west build failed"
+else
+    # Hardware targets (ESP32, etc.): Zephyr SDK environment already configured above
+    west build -b "$BOARD" "$PROJECT/app" -d "$BUILD_DIR" -p always || die "west build failed"
+fi
+
+ok "Build successful at: $BUILD_DIR"
 echo ""
 
 # ── 6. Next steps ────────────────────────────────────────────────────────────
@@ -166,16 +197,34 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " Setup & build complete for '$PROJECT'! Re-running this script any time is safe."
 echo ""
 echo " Switch to a different project and rebuild:"
-echo "   sh scripts/setup.sh native_project  # or native_project_2"
+echo "   sh scripts/setup.sh native_project  # or native_project_2, esp32_led_blink"
 echo ""
 echo " Activate the environment in any new terminal:"
 echo "   source $VENV_DIR/bin/activate"
 echo ""
-echo " Run the built app:"
-echo "   ./$PROJECT/build_native/zephyr/zephyr.exe"
+
+if [ "$BOARD" = "native_posix_64" ]; then
+    echo " Run the built app (native POSIX):"
+    echo "   ./$PROJECT/build_native_posix_64/zephyr/zephyr.exe"
+else
+    BUILD_BINARY="$BUILD_DIR/zephyr/zephyr.bin"
+    echo " Build outputs (hardware target):"
+    echo "   Application:  $BUILD_BINARY"
+    echo "   Bootloader:   $BUILD_DIR/zephyr/bootloader-esp32.bin"
+    echo "   Partitions:   $BUILD_DIR/zephyr/partitions.bin"
+    echo ""
+    echo " To flash to ESP32 board:"
+    echo "   esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \\"
+    echo "     0x1000 $BUILD_DIR/zephyr/bootloader-esp32.bin \\"
+    echo "     0x8000 $BUILD_DIR/zephyr/partitions.bin \\"
+    echo "     0x10000 $BUILD_DIR/zephyr/zephyr.bin"
+    echo ""
+    echo " Monitor serial output:"
+    echo "   picocom /dev/ttyUSB0 -b 115200"
+fi
+
 echo ""
 echo " Rebuild $PROJECT without full setup:"
-echo "   cd $REPO_ROOT"
-echo "   source venv/bin/activate"
-echo "   west build -b native_posix_64 $PROJECT/app -d $PROJECT/build_native"
+echo "   cd $REPO_ROOT && source venv/bin/activate"
+echo "   west build -b $BOARD $PROJECT/app -d $PROJECT/build_$BOARD"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
