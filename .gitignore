@@ -20,3 +20,4 @@ __pycache__/
 *.tar.xz
 
 /zephyr-sdk-0.16.8
+/modules
