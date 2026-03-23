@@ -1,0 +1,14 @@
+manifest:
+  projects:
+    - name: zephyr
+      url: https://github.com/zephyrproject-rtos/zephyr.git
+      revision: v3.7.0
+      import: false
+      west-commands: scripts/west-commands.yml
+    # ESP32 HAL for GPIO support
+    - name: hal_espressif
+      url: https://github.com/zephyrproject-rtos/hal_espressif.git
+      revision: zephyr
+      path: modules/hal/espressif
+  self:
+    path: esp32_led_blink

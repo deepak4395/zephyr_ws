@@ -31,17 +31,48 @@ VENV_DIR="$REPO_ROOT/venv"
 PROJECT=${1:-}
 
 if [ -z "$PROJECT" ]; then
-    # Interactive: list available projects
-    info "Available projects:"
-    echo "  1) native_project"
-    echo "  2) native_project_2"
-    printf "Select project (1 or 2): "
+    # Interactive: discover and list available projects dynamically
+    info "Discovering projects..."
+    
+    # Find all directories with west.yml (projects)
+    i=1
+    projects_list=""
+    while IFS= read -r project_dir; do
+        project_name=$(basename "$project_dir")
+        echo "  $i) $project_name"
+        if [ -z "$projects_list" ]; then
+            projects_list="$project_name"
+        else
+            projects_list="$projects_list
+$project_name"
+        fi
+        i=$((i + 1))
+    done <<EOF
+$(find "$REPO_ROOT" -maxdepth 2 -name "west.yml" -type f | xargs dirname | sort)
+EOF
+    
+    if [ "$i" -eq 1 ]; then
+        die "No projects found with west.yml"
+    fi
+    
+    printf "Select project (1 to $((i - 1))): "
     read -r choice
-    case "$choice" in
-        1) PROJECT="native_project" ;;
-        2) PROJECT="native_project_2" ;;
-        *) die "Invalid choice: $choice" ;;
-    esac
+    
+    # Convert choice to project name
+    project_num=1
+    while IFS= read -r proj; do
+        if [ "$project_num" -eq "$choice" ]; then
+            PROJECT="$proj"
+            break
+        fi
+        project_num=$((project_num + 1))
+    done <<EOF
+$projects_list
+EOF
+    
+    if [ -z "$PROJECT" ]; then
+        die "Invalid choice: $choice"
+    fi
 fi
 
 # Validate project exists
@@ -49,8 +80,22 @@ if [ ! -f "$REPO_ROOT/$PROJECT/west.yml" ]; then
     die "Project '$PROJECT' not found: $REPO_ROOT/$PROJECT/west.yml"
 fi
 
+# Detect board based on project name
+case "$PROJECT" in
+    esp32*)
+        BOARD="esp32_devkitc_wroom"
+        ;;
+    native*)
+        BOARD="native_posix_64"
+        ;;
+    *)
+        BOARD="native_posix_64"  # default
+        ;;
+esac
+
 info "Repo root  : $REPO_ROOT"
 info "Project    : $PROJECT"
+info "Board      : $BOARD"
 info "Venv dir   : $VENV_DIR"
 echo ""
 

@@ -16,3 +16,7 @@ __pycache__/
 # Editor / OS
 .DS_Store
 *.swp
+
+*.tar.xz
+
+/zephyr-sdk-0.16.8
