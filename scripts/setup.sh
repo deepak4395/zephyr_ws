@@ -5,6 +5,7 @@
 #   sh scripts/setup.sh                        # Interactive: choose project
 #   sh scripts/setup.sh native_project         # Non-interactive: use native_project
 #   sh scripts/setup.sh native_project_2       # Non-interactive: use native_project_2
+#   sh scripts/setup.sh pico_led_blink         # Non-interactive: use pico_led_blink
 #
 # What it does (each step is skipped if already done):
 #   1. Creates venv at <repo>/venv if absent
@@ -84,6 +85,9 @@ fi
 case "$PROJECT" in
     esp32*)
         BOARD="esp32_devkitc_wroom"
+        ;;
+    pico*)
+        BOARD="rpi_pico"
         ;;
     native*)
         BOARD="native_posix_64"
@@ -197,7 +201,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " Setup & build complete for '$PROJECT'! Re-running this script any time is safe."
 echo ""
 echo " Switch to a different project and rebuild:"
-echo "   sh scripts/setup.sh native_project  # or native_project_2, esp32_led_blink"
+echo "   sh scripts/setup.sh native_project  # or native_project_2, esp32_led_blink, pico_led_blink"
 echo ""
 echo " Activate the environment in any new terminal:"
 echo "   source $VENV_DIR/bin/activate"
@@ -206,6 +210,19 @@ echo ""
 if [ "$BOARD" = "native_posix_64" ]; then
     echo " Run the built app (native POSIX):"
     echo "   ./$PROJECT/build_native_posix_64/zephyr/zephyr.exe"
+elif [ "$BOARD" = "rpi_pico" ]; then
+    UF2_FILE="$BUILD_DIR/zephyr/zephyr.uf2"
+    ELF_FILE="$BUILD_DIR/zephyr/zephyr.elf"
+    echo " Build outputs (Raspberry Pi Pico):"
+    echo "   UF2 image:   $UF2_FILE"
+    echo "   ELF image:   $ELF_FILE"
+    echo ""
+    echo " To flash with UF2 drag-and-drop:"
+    echo "   1) Hold BOOTSEL and connect Pico via USB"
+    echo "   2) Copy $UF2_FILE to the mounted RPI-RP2 drive"
+    echo ""
+    echo " Or flash using west (if probe/runner is configured):"
+    echo "   west flash -d $BUILD_DIR"
 else
     BUILD_BINARY="$BUILD_DIR/zephyr/zephyr.bin"
     echo " Build outputs (hardware target):"

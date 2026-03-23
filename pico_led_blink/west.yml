@@ -1,0 +1,17 @@
+manifest:
+  projects:
+    - name: zephyr
+      url: https://github.com/zephyrproject-rtos/zephyr.git
+      revision: v3.7.0
+      import: false
+      west-commands: scripts/west-commands.yml
+    - name: hal_rpi_pico
+      url: https://github.com/zephyrproject-rtos/hal_rpi_pico.git
+      revision: fba7162cc7bee06d0149622bbcaac4e41062d368
+      path: modules/hal/rpi_pico
+    - name: cmsis
+      url: https://github.com/zephyrproject-rtos/cmsis.git
+      revision: 4b96cbb174678dcd3ca86e11e1f24bc5f8726da0
+      path: modules/hal/cmsis
+  self:
+    path: pico_led_blink
