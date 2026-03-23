@@ -1,2 +1,3 @@
 /.west
 /zephyr
+/native_project/build_native

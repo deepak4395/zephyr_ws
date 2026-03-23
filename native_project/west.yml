@@ -1,0 +1,9 @@
+manifest:
+  projects:
+    - name: zephyr
+      url: https://github.com/zephyrproject-rtos/zephyr.git
+      revision: v3.7.0
+      import: false
+      west-commands: scripts/west-commands.yml
+  self:
+    path: native_project
