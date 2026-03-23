@@ -24,6 +24,15 @@ warn()  { printf 'WARN: %s\n' "$*" >&2; }
 die()   { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 ok()    { printf '    OK: %s\n' "$*"; }
 
+detect_board() {
+    case "$1" in
+        esp32*)  echo "esp32_devkitc_wroom" ;;
+        pico*)   echo "rpi_pico" ;;
+        native*) echo "native_posix_64" ;;
+        *)       echo "native_posix_64" ;;
+    esac
+}
+
 # ── repo / venv paths ────────────────────────────────────────────────────────
 REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VENV_DIR="$REPO_ROOT/venv"
@@ -32,48 +41,40 @@ VENV_DIR="$REPO_ROOT/venv"
 PROJECT=${1:-}
 
 if [ -z "$PROJECT" ]; then
-    # Interactive: discover and list available projects dynamically
+    # Interactive: discover and list available projects dynamically.
     info "Discovering projects..."
-    
-    # Find all directories with west.yml (projects)
-    i=1
-    projects_list=""
-    while IFS= read -r project_dir; do
-        project_name=$(basename "$project_dir")
-        echo "  $i) $project_name"
-        if [ -z "$projects_list" ]; then
-            projects_list="$project_name"
-        else
-            projects_list="$projects_list
-$project_name"
-        fi
-        i=$((i + 1))
-    done <<EOF
-$(find "$REPO_ROOT" -maxdepth 2 -name "west.yml" -type f | xargs dirname | sort)
-EOF
-    
-    if [ "$i" -eq 1 ]; then
+
+    PROJECTS_FILE=$(mktemp) || die "Failed to create temporary file"
+    trap 'rm -f "$PROJECTS_FILE"' EXIT INT TERM
+
+    # Build a numbered list from west.yml locations.
+    find "$REPO_ROOT" -maxdepth 2 -name "west.yml" -type f | sort | while IFS= read -r manifest; do
+        basename "$(dirname "$manifest")"
+    done > "$PROJECTS_FILE"
+
+    project_count=$(wc -l < "$PROJECTS_FILE" | awk '{print $1}')
+    if [ "$project_count" -eq 0 ]; then
         die "No projects found with west.yml"
     fi
-    
-    printf "Select project (1 to $((i - 1))): "
+
+    i=1
+    while IFS= read -r project_name; do
+        echo "  $i) $project_name"
+        i=$((i + 1))
+    done < "$PROJECTS_FILE"
+
+    printf "Select project (1 to %s): " "$project_count"
     read -r choice
-    
-    # Convert choice to project name
-    project_num=1
-    while IFS= read -r proj; do
-        if [ "$project_num" -eq "$choice" ]; then
-            PROJECT="$proj"
-            break
-        fi
-        project_num=$((project_num + 1))
-    done <<EOF
-$projects_list
-EOF
-    
-    if [ -z "$PROJECT" ]; then
+
+    case "$choice" in
+        ''|*[!0-9]*) die "Invalid choice: $choice" ;;
+    esac
+
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$project_count" ]; then
         die "Invalid choice: $choice"
     fi
+
+    PROJECT=$(sed -n "${choice}p" "$PROJECTS_FILE")
 fi
 
 # Validate project exists
@@ -81,21 +82,8 @@ if [ ! -f "$REPO_ROOT/$PROJECT/west.yml" ]; then
     die "Project '$PROJECT' not found: $REPO_ROOT/$PROJECT/west.yml"
 fi
 
-# Detect board based on project name
-case "$PROJECT" in
-    esp32*)
-        BOARD="esp32_devkitc_wroom"
-        ;;
-    pico*)
-        BOARD="rpi_pico"
-        ;;
-    native*)
-        BOARD="native_posix_64"
-        ;;
-    *)
-        BOARD="native_posix_64"  # default
-        ;;
-esac
+# Detect board based on project name.
+BOARD=$(detect_board "$PROJECT")
 
 info "Repo root  : $REPO_ROOT"
 info "Project    : $PROJECT"
@@ -103,10 +91,10 @@ info "Board      : $BOARD"
 info "Venv dir   : $VENV_DIR"
 echo ""
 
-# ── 0. ESP32 environment setup (if needed) ────────────────────────────────────
+# ── 0. Hardware target SDK environment (if needed) ──────────────────────────
 if [ "$BOARD" != "native_posix_64" ]; then
     info "Setting up hardware target environment..."
-    
+
     # Check if Zephyr SDK is installed
     SDK_DIR="$REPO_ROOT/zephyr-sdk-0.16.8"
     if [ ! -d "$SDK_DIR" ]; then
@@ -120,7 +108,7 @@ Please install it first:
     export ZEPHYR_SDK_INSTALL_DIR="$SDK_DIR"
     export PATH="$SDK_DIR/x86_64-pokysdk-linux/usr/bin:$PATH"
     export PATH="$SDK_DIR/tools/bin:$PATH"
-    
+
     ok "ZEPHYR_SDK_INSTALL_DIR=$ZEPHYR_SDK_INSTALL_DIR"
 fi
 echo ""
